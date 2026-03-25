@@ -2,7 +2,7 @@
 FROM composer:2 AS composer_build
 WORKDIR /app
 COPY composer.json composer.lock* ./
-RUN composer install --no-dev --ignore-platform-reqs || true
+RUN mkdir -p lib/composer && composer install --no-dev --ignore-platform-reqs || true
 
 # Stage 2: Build Javascript/Vue UI assets (if you modify the UI)
 FROM node:20 AS node_build
@@ -18,6 +18,7 @@ RUN npm run build || echo "Build script not found or failed, continuing..."
 # Stage 3: Final Production Image
 # We layer your compiled web assets on top of the official image
 FROM nextcloud:30-apache
-COPY --from=composer_build /app/vendor /var/www/html/vendor
 COPY --from=node_build /app /var/www/html/
+# Safely copy composer dependencies
+COPY --from=composer_build /app/lib/composer /var/www/html/lib/composer
 RUN chown -R www-data:www-data /var/www/html
