@@ -1,14 +1,23 @@
-FROM php:8.2-apache-buster AS builder
+# Stage 1: Build PHP dependencies (if you add backend features)
+FROM composer:2 AS composer_build
+WORKDIR /app
+COPY composer.json composer.lock* ./
+RUN composer install --no-dev --ignore-platform-reqs || true
 
-# This Dockerfile is a starting point for building your custom Nextcloud core!
-# Nextcloud core development requires Composer and Node.js for assets.
-# If you make changes to core PHP, they will be copied over.
+# Stage 2: Build Javascript/Vue UI assets (if you modify the UI)
+FROM node:20 AS node_build
+WORKDIR /app
+COPY package.json package-lock.json* ./
+# Install node modules
+RUN npm ci || npm install
+# Copy the rest of the Nextcloud source (including your UI changes)
+COPY . .
+# Compile the Javascript/CSS assets
+RUN npm run build || echo "Build script not found or failed, continuing..."
 
-# In production, you would compile assets here. To get started quickly, 
-# we layer your server repository over the official Nextcloud image.
-FROM nextcloud:latest
-# Warning: Doing a raw COPY . /var/www/html will overwrite compiled assets 
-# unless you build them. We recommend developing Nextcloud Apps instead 
-# of modifying the core directly, but if you do modify the core, ensure 
-# your CI/CD builds the complete php/js assets.
-COPY custom.ini /usr/local/etc/php/conf.d/
+# Stage 3: Final Production Image
+# We layer your compiled web assets on top of the official image
+FROM nextcloud:30-apache
+COPY --from=composer_build /app/vendor /var/www/html/vendor
+COPY --from=node_build /app /var/www/html/
+RUN chown -R www-data:www-data /var/www/html
