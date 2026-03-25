@@ -5,13 +5,14 @@ COPY composer.json composer.lock* ./
 RUN mkdir -p lib/composer && composer install --no-dev --ignore-platform-reqs || true
 
 # Stage 2: Build Javascript/Vue UI assets (if you modify the UI)
-FROM node:20 AS node_build
+FROM node:24 AS node_build
 WORKDIR /app
-COPY package.json package-lock.json* ./
-# Install node modules
-RUN npm ci || npm install
-# Copy the rest of the Nextcloud source (including your UI changes)
+# Copy the rest of the Nextcloud source first so demi.sh and other required files exist for postinstall
 COPY . .
+# Install node modules
+RUN npm ci --ignore-scripts || npm install --ignore-scripts
+# Run postinstall scripts now if any
+RUN npm rebuild || true
 # Compile the Javascript/CSS assets
 RUN npm run build || echo "Build script not found or failed, continuing..."
 
